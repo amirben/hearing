@@ -1,7 +1,8 @@
 #include "portaudio.h"
 #include <stdio.h>
+#include <math.h>
 #define SAMPLE_RATE 44100
-#define NUM_SECONDS 6
+#define NUM_SECONDS 2
 #define FRAMES_PER_BUFFER 256
  #define PA_SAMPLE_TYPE  paFloat32
 int patestCallback(const void *input,
@@ -10,11 +11,13 @@ int patestCallback(const void *input,
                                       const PaStreamCallbackTimeInfo* timeInfo,
                                       PaStreamCallbackFlags statusFlags,
                                       void *userData);
+float RMS(float *data, int len);
 typedef struct
 {
 	int          frameIndex;  /* Index into sample array. */
-     int          maxFrameIndex;
-	 float      *recordedSamples;
+     int          maxFrameIndex;//maximum samples available
+	 float      *recordedSamples_ch1;//sampling for channel 1
+	 float      *recordedSamples_ch2;//sampling for channel 2
  }
  paTestData;
 
@@ -22,25 +25,34 @@ int main()
 {
 
 	PaStream *stream;
-	int err;
-	int numDevices;
-	int i;
-	int j;
-	int device_chosen;
-	int channel_chosen;
-	paTestData dat;
-	float samparr[SAMPLE_RATE*5];
+	int err;//basic error chcking by portaudio
+	int numDevices;//amount of devices recognized by portaudio
+	int i;//for loops
+	int j;//for loops
+	int device_chosen;//number of device chosen
+	int channel_chosen;//amount of channels to be recorded into
+	paTestData dat;//struct sent to callback function
+	float samparr1[SAMPLE_RATE*NUM_SECONDS];//array for channel 1 stored data
+	float samparr2[SAMPLE_RATE*NUM_SECONDS];//array for channel 1 stored data
+	char *bin;
 	const   PaDeviceInfo *deviceInfo;
-	PaStreamParameters inp;
-	FILE *fp;
+	float rms=0;
+	PaStreamParameters inp;//input into stream
+	FILE *fp;//for file I/O
+
+
+
 	//// end of decleration
+
+
 	err= Pa_Initialize();
 	if( err != paNoError ) printf(  "PortAudio error: %s\n", Pa_GetErrorText( err ) );
 	
 	
 	dat.frameIndex=0;
-	dat.maxFrameIndex=	SAMPLE_RATE*5;
-	dat.recordedSamples = samparr;
+	dat.maxFrameIndex=	SAMPLE_RATE*NUM_SECONDS;
+	dat.recordedSamples_ch1 = samparr1;
+	dat.recordedSamples_ch2 = samparr2;
 	numDevices = Pa_GetDeviceCount();
 	if( numDevices < 0 )
 	{
@@ -50,25 +62,27 @@ int main()
 	}
 
 
-	for(i=0;i<numDevices;i++)
+	for(i=0;i<numDevices;i++)		//loops over all devices showing basic information
 	{
 		deviceInfo = Pa_GetDeviceInfo( i );
 		printf(" device nunber %d :\n",i);
 		printf("%s\n", deviceInfo->name);
 		printf("input channels: %d\n",deviceInfo->maxInputChannels);
-		printf("default samp rate: %d\n\n",deviceInfo->defaultSampleRate);
+		printf("default samp rate: %d\n\n",deviceInfo->defaultSampleRate); //shows sample rate of 0 all the time(though recording works)
 	}
 
-
+	//prompting user for info
 	printf("choose your device:");
 	scanf("%d",&device_chosen);
 	deviceInfo = Pa_GetDeviceInfo( device_chosen );
 	printf("choose input channels:");
 	scanf("%d",&channel_chosen);
+	//
 	inp.channelCount=channel_chosen;
 	inp.device=Pa_GetHostApiInfo(deviceInfo->hostApi)->defaultInputDevice;
 	inp.sampleFormat=PA_SAMPLE_TYPE;
-	inp.hostApiSpecificStreamInfo=NULL; // ze null
+	inp.hostApiSpecificStreamInfo=NULL; // optional for future implementation
+
 	err = Pa_OpenStream(
 			&stream,
 			&inp, 
@@ -76,34 +90,58 @@ int main()
 			SAMPLE_RATE,
 			FRAMES_PER_BUFFER,
 			paClipOff,      /* we won't output out of range samples so don't bother clipping them */
-			patestCallback,
-			&dat );
+			patestCallback, //callback function to be run each time samples are available
+			&dat );//data to be passed to function, currently struct of type patestdata
     if( err != paNoError ) printf(  "PortAudio error: %s\n", Pa_GetErrorText( err ) );
+
 
 	err = Pa_StartStream( stream );
 	if( err != paNoError ) printf(  "PortAudio error: %s\n", Pa_GetErrorText( err ) );
-
+	
+	//just waiting for audio to come in
 	/* Sleep for several seconds. */
-	Pa_Sleep(NUM_SECONDS*1000);
+	Pa_Sleep((NUM_SECONDS+1)*1000);
+
 
 	err = Pa_StopStream( stream );
 	if( err != paNoError )  printf(  "PortAudio error: %s\n", Pa_GetErrorText( err ) );
 
 	err = Pa_Terminate();
 	if( err != paNoError ) printf(  "PortAudio error: %s\n", Pa_GetErrorText( err ) );
+	//closed all portaudio streams and such
+	//not using anything portaudio related from now on
+
+	//only output
+	//currently works on only 1 channel
 
 	printf("%d samples taken for a total of %f seconds",dat.frameIndex,(float)dat.frameIndex/SAMPLE_RATE);
-	fp=fopen("samp.txt","w");
+	fp=fopen("samp.csv","w");//writes to csv file
 	j=0;
-	while(dat.recordedSamples[j++]==(float)0);
-	j+=9247;
+	while(dat.recordedSamples_ch1[j++]==(float)0);	//skip leading zeroes(alot of them)
+	j+=9247;										//there's a lot of low level noise from there on
 	for(;j<dat.maxFrameIndex;j++)
 	{
-		//printf("%f\n",dat.recordedSamples[j]);
-		fprintf(fp,"%f,",dat.recordedSamples[j]);
+		fprintf(fp,"%f,",dat.recordedSamples_ch1[j]/*,dat.recordedSamples_ch2[j]*/);
 	}
 
 	fclose(fp);
+	j=0;
+	while(dat.recordedSamples_ch1[j++]==(float)0);	//skip leading zeroes(alot of them)
+	j+=9247;										//there's a lot of low level noise from there on
+	fp=fopen("samp.bin","w");						//write pure float memory to bytes
+	dat.recordedSamples_ch1+=j;
+	rms=RMS(dat.recordedSamples_ch1,dat.maxFrameIndex-j);//calculates rms
+	printf("\n\n");
+	printf("rms is: %f \n\n",rms);
+	bin= (char*)dat.recordedSamples_ch1;
+	for(;j<dat.maxFrameIndex;j++)//loops over all array and outputs each float as 4 chars into file
+	{
+		fputc(*bin++,fp);
+		fputc(*bin++,fp);
+		fputc(*bin++,fp);
+		fputc(*bin++,fp);
+	}
+
 	return 0;
 }
 
@@ -113,7 +151,7 @@ int patestCallback(const void *input,void *output,unsigned long frameCount,const
 	paTestData *d = (paTestData*)userData;
 	float *in = (float*)input;
 	const float *rptr = (const float*)input;
-	float *wptr = &d->recordedSamples[d->frameIndex];
+	float *wptr = &d->recordedSamples_ch1[d->frameIndex];
 
 	if(d->frameIndex>d->maxFrameIndex) return 0;
 	while(i<frameCount && (d->frameIndex < d->maxFrameIndex))
@@ -123,4 +161,17 @@ int patestCallback(const void *input,void *output,unsigned long frameCount,const
 		i++;
 	}
 	return 0;
+}
+
+float RMS(float *data, int len)
+{
+	float rms = 0;
+	int i;
+	for(i = 0; i < len; i++)
+	{
+		rms += data[i]*data[i];
+	}
+	rms /= (float)len;
+	rms = (float)sqrt(rms);
+	return rms;
 }
