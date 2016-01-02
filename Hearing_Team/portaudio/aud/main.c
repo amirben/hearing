@@ -26,6 +26,8 @@ int main()
 	int numDevices;
 	int i;
 	int j;
+	int device_chosen;
+	int channel_chosen;
 	paTestData dat;
 	float samparr[SAMPLE_RATE*5];
 	const   PaDeviceInfo *deviceInfo;
@@ -51,16 +53,19 @@ int main()
 	for(i=0;i<numDevices;i++)
 	{
 		deviceInfo = Pa_GetDeviceInfo( i );
+		printf(" device nunber %d :\n",i);
 		printf("%s\n", deviceInfo->name);
 		printf("input channels: %d\n",deviceInfo->maxInputChannels);
 		printf("default samp rate: %d\n\n",deviceInfo->defaultSampleRate);
 	}
-    deviceInfo = Pa_GetDeviceInfo( 9 );
-	
-	printf("%s\n", deviceInfo->name);
-	printf("input channels: %d\n\n",deviceInfo->maxInputChannels);
-	printf("default samp rate: %d",deviceInfo->defaultSampleRate);
-	inp.channelCount=1;
+
+
+	printf("choose your device:");
+	scanf("%d",&device_chosen);
+	deviceInfo = Pa_GetDeviceInfo( device_chosen );
+	printf("choose input channels:");
+	scanf("%d",&channel_chosen);
+	inp.channelCount=channel_chosen;
 	inp.device=Pa_GetHostApiInfo(deviceInfo->hostApi)->defaultInputDevice;
 	inp.sampleFormat=PA_SAMPLE_TYPE;
 	inp.hostApiSpecificStreamInfo=NULL; // ze null
@@ -91,7 +96,7 @@ int main()
 	fp=fopen("samp.txt","w");
 	j=0;
 	while(dat.recordedSamples[j++]==(float)0);
-
+	j+=9247;
 	for(;j<dat.maxFrameIndex;j++)
 	{
 		//printf("%f\n",dat.recordedSamples[j]);
