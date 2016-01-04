@@ -52,7 +52,8 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>portaudio_x86.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <StackReserveSize>16777216</StackReserveSize>
+      <StackReserveSize>
+      </StackReserveSize>
       <StackCommitSize>
       </StackCommitSize>
     </Link>
