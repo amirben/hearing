@@ -1,11 +1,19 @@
 #include "portaudio.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #define SAMPLE_RATE 44100
-#define NUM_SECONDS 2
+#define NUM_SECONDS 5
 #define FRAMES_PER_BUFFER 256
  #define PA_SAMPLE_TYPE  paFloat32
+
 int patestCallback(const void *input,
+                                      void *output,
+                                      unsigned long frameCount,
+                                      const PaStreamCallbackTimeInfo* timeInfo,
+                                      PaStreamCallbackFlags statusFlags,
+                                      void *userData);
+int patestCallback_2ch(const void *input,
                                       void *output,
                                       unsigned long frameCount,
                                       const PaStreamCallbackTimeInfo* timeInfo,
@@ -32,8 +40,6 @@ int main()
 	int device_chosen;//number of device chosen
 	int channel_chosen;//amount of channels to be recorded into
 	paTestData dat;//struct sent to callback function
-	float samparr1[SAMPLE_RATE*NUM_SECONDS];//array for channel 1 stored data
-	float samparr2[SAMPLE_RATE*NUM_SECONDS];//array for channel 1 stored data
 	char *bin;
 	const   PaDeviceInfo *deviceInfo;
 	float rms=0;
@@ -51,8 +57,8 @@ int main()
 	
 	dat.frameIndex=0;
 	dat.maxFrameIndex=	SAMPLE_RATE*NUM_SECONDS;
-	dat.recordedSamples_ch1 = samparr1;
-	dat.recordedSamples_ch2 = samparr2;
+	dat.recordedSamples_ch1 = (float*)calloc(SAMPLE_RATE*NUM_SECONDS,sizeof(float));
+	dat.recordedSamples_ch2 = (float*)calloc(SAMPLE_RATE*NUM_SECONDS,sizeof(float));
 	numDevices = Pa_GetDeviceCount();
 	if( numDevices < 0 )
 	{
@@ -65,10 +71,10 @@ int main()
 	for(i=0;i<numDevices;i++)		//loops over all devices showing basic information
 	{
 		deviceInfo = Pa_GetDeviceInfo( i );
-		printf(" device nunber %d :\n",i);
+		printf(" device number %d :\n",i);
 		printf("%s\n", deviceInfo->name);
 		printf("input channels: %d\n",deviceInfo->maxInputChannels);
-		printf("default samp rate: %d\n\n",deviceInfo->defaultSampleRate); //shows sample rate of 0 all the time(though recording works)
+		printf("default samp rate: %p \n\n",deviceInfo->defaultSampleRate); //shows sample rate of 0 all the time(though recording works)
 	}
 
 	//prompting user for info
@@ -175,3 +181,24 @@ float RMS(float *data, int len)
 	rms = (float)sqrt(rms);
 	return rms;
 }
+
+int patestCallback_2ch(const void *input,void *output,unsigned long frameCount,const PaStreamCallbackTimeInfo* timeInfo,PaStreamCallbackFlags statusFlags,void *userData)
+{
+	unsigned int i=0;
+	paTestData *d = (paTestData*)userData;
+	float *in = (float*)input;
+	const float *rptr = (const float*)input;
+	float *wptr1 = &d->recordedSamples_ch1[d->frameIndex];
+	float *wptr2 = &d->recordedSamples_ch2[d->frameIndex];
+
+	if(d->frameIndex>d->maxFrameIndex) return 0;
+	while(i<frameCount && (d->frameIndex < d->maxFrameIndex))
+	{
+		*wptr1++=*in++;
+		*wptr2++=*in++;
+		d->frameIndex++;
+		i++;
+	}
+	return 0;
+}
+
